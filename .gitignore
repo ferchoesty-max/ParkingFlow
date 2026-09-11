@@ -3,6 +3,9 @@ node_modules/
 .pnp
 .pnp.js
 
+# Documentation
+docs/
+
 # Nuxt build output
 .nuxt/
 .output/
