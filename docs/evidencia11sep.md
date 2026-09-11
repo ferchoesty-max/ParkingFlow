@@ -1,5 +1,5 @@
 # Evidencia 1
-## Clase 11 de Septiembre 2026 - Ximena Abyade Campos Miranda
+## Clase 11 de Septiembre 2026 - Fernando Daniel Tolentino Uribe
 
 ---
 
