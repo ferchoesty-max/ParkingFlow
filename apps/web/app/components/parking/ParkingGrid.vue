@@ -19,8 +19,8 @@ const emit = defineEmits<{
       <h2 class="text-xl font-bold text-slate-900">
         Estado del Estacionamiento
       </h2>
-      <span class="text-sm font-medium text-slate-500">
-        {{ spaces.length }} cajones registrados
+      <span class="text-sm text-slate-500">
+        {{ spaces.length }}
       </span>
     </div>
 
