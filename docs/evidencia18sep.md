@@ -1,4 +1,4 @@
-# Evidencia 2 — Check-in de Vehículos y Asignación Automática de Cajones
+# Evidencia 2 — Check-in de Vehículos y Asignación Automática de Cajones con Cloud Firestore
 
 **Nombre:** Fernando Daniel Tolentino Uribe  
 **NUA:** 395108  
@@ -6,6 +6,70 @@
 **Carrera:** Ingeniería en Sistemas Computacionales  
 **Materia:** Cómputo en la Nube  
 **Fecha:** 18 de Septiembre de 2026  
+
+---
+
+## 📁 `apps/api/src/config/firebase.ts`
+
+```typescript
+import { cert, getApps, initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+import { env } from './env.js'
+
+export const isFirebaseConfigured = Boolean(
+  env.FIREBASE_PROJECT_ID &&
+  env.FIREBASE_CLIENT_EMAIL &&
+  env.FIREBASE_PRIVATE_KEY &&
+  !env.FIREBASE_PRIVATE_KEY.includes('mock') &&
+  env.FIREBASE_PRIVATE_KEY.length > 500
+)
+
+if (isFirebaseConfigured && getApps().length === 0) {
+  try {
+    initializeApp({
+      credential: cert({
+        projectId: env.FIREBASE_PROJECT_ID,
+        clientEmail: env.FIREBASE_CLIENT_EMAIL,
+        privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      }),
+    })
+  } catch {
+    initializeApp({
+      projectId: env.FIREBASE_PROJECT_ID,
+    })
+  }
+} else if (getApps().length === 0) {
+  initializeApp({
+    projectId: env.FIREBASE_PROJECT_ID || 'parking-flow-dev',
+  })
+}
+
+export const db = getFirestore()
+```
+
+---
+
+## 📁 `apps/api/src/config/env.ts`
+
+```typescript
+import 'dotenv/config'
+import { z } from 'zod'
+
+const envSchema = z.object({
+  PORT: z.coerce.number().default(3001),
+  CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  FIREBASE_PROJECT_ID: z.string().default('parking-flow-dev'),
+  FIREBASE_CLIENT_EMAIL: z.string().default('firebase-adminsdk@parking-flow-dev.iam.gserviceaccount.com'),
+  FIREBASE_PRIVATE_KEY: z.string().default('-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC6\n-----END PRIVATE KEY-----\n'),
+  JWT_ACCESS_SECRET: z.string().min(32).default('change-me-access-secret-minimum-32-characters-key'),
+  JWT_REFRESH_SECRET: z.string().min(32).default('change-me-refresh-secret-minimum-32-characters-key'),
+  ACCESS_TOKEN_TTL: z.string().default('15m'),
+  REFRESH_TOKEN_TTL: z.string().default('7d'),
+  COOKIE_SECURE: z.string().default('false').transform(value => value === 'true'),
+})
+
+export const env = envSchema.parse(process.env)
+```
 
 ---
 
@@ -42,7 +106,7 @@ export const vehicleRepository = {
     try {
       const snapshot = await collection.where('plate', '==', plate).limit(1).get()
       const doc = snapshot.docs[0]
-      if (!doc) return memoryVehicles.find(v => v.plate === plate) ?? null
+      if (!doc) return null
       return { id: doc.id, ...(doc.data() as Omit<Vehicle, 'id'>) }
     } catch {
       return memoryVehicles.find(v => v.plate === plate) ?? null
@@ -64,6 +128,184 @@ export const vehicleRepository = {
       const vehicle = { id: `veh-${Date.now()}`, ...data }
       memoryVehicles.push(vehicle)
       return vehicle
+    }
+  },
+}
+```
+
+---
+
+## 📁 `apps/api/src/modules/parking-spaces/parking-space.types.ts`
+
+```typescript
+export type ParkingSpaceStatus = 'AVAILABLE' | 'OCCUPIED' | 'OUT_OF_SERVICE'
+export type ParkingSpaceType = 'REGULAR' | 'DISABLED' | 'MOTORCYCLE'
+
+export interface ParkingSpace {
+  id: string
+  code: string
+  zone: string
+  type: ParkingSpaceType
+  status: ParkingSpaceStatus
+  active: boolean
+}
+```
+
+---
+
+## 📁 `apps/api/src/modules/parking-spaces/parking-space.repository.ts`
+
+```typescript
+import { db, isFirebaseConfigured } from '../../config/firebase.js'
+import type { ParkingSpace } from './parking-space.types.js'
+
+const collection = db.collection('parkingSpaces')
+
+const memorySpaces: ParkingSpace[] = [
+  { id: 'space-a01', code: 'A01', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { id: 'space-a02', code: 'A02', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { id: 'space-a03', code: 'A03', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { id: 'space-a04', code: 'A04', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { id: 'space-b01', code: 'B01', zone: 'B', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { id: 'space-b02', code: 'B02', zone: 'B', type: 'REGULAR', status: 'AVAILABLE', active: true },
+]
+
+export const parkingSpaceRepository = {
+  async list(): Promise<ParkingSpace[]> {
+    if (!isFirebaseConfigured) return memorySpaces
+    try {
+      const snapshot = await collection.orderBy('code').get()
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...(doc.data() as Omit<ParkingSpace, 'id'>),
+      }))
+    } catch {
+      return memorySpaces
+    }
+  },
+
+  async findByCode(code: string): Promise<ParkingSpace | null> {
+    if (!isFirebaseConfigured) return memorySpaces.find(s => s.code === code) ?? null
+    try {
+      const snapshot = await collection.where('code', '==', code).limit(1).get()
+      const doc = snapshot.docs[0]
+      if (!doc) return null
+      return { id: doc.id, ...(doc.data() as Omit<ParkingSpace, 'id'>) }
+    } catch {
+      return memorySpaces.find(s => s.code === code) ?? null
+    }
+  },
+
+  async create(data: Omit<ParkingSpace, 'id'>): Promise<ParkingSpace> {
+    if (!isFirebaseConfigured) {
+      const space = { id: `space-${Date.now()}`, ...data }
+      memorySpaces.push(space)
+      return space
+    }
+    try {
+      const ref = await collection.add(data)
+      const space = { id: ref.id, ...data }
+      memorySpaces.push(space)
+      return space
+    } catch {
+      const space = { id: `space-${Date.now()}`, ...data }
+      memorySpaces.push(space)
+      return space
+    }
+  },
+
+  updateMemoryStatus(spaceId: string, status: ParkingSpace['status']) {
+    const space = memorySpaces.find(s => s.id === spaceId)
+    if (space) space.status = status
+  },
+
+  getMemorySpaces(): ParkingSpace[] {
+    return memorySpaces
+  },
+}
+```
+
+---
+
+## 📁 `apps/api/src/modules/users/user.types.ts`
+
+```typescript
+export type UserRole = 'ADMIN' | 'OPERATOR'
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  active: boolean
+  passwordHash: string
+  createdAt: string
+}
+
+export type PublicUser = Omit<User, 'passwordHash'>
+```
+
+---
+
+## 📁 `apps/api/src/modules/users/user.repository.ts`
+
+```typescript
+import { db, isFirebaseConfigured } from '../../config/firebase.js'
+import type { User } from './user.types.js'
+
+const collection = db.collection('users')
+
+// Default admin user for local / test development
+const memoryUsers: User[] = [
+  {
+    id: 'user-admin-default',
+    name: 'Administrador',
+    email: 'admin@parkingflow.local',
+    role: 'ADMIN',
+    active: true,
+    // Hash for 'Admin123!' with bcrypt
+    passwordHash: '$2b$10$/zlXxIQ7tfms2XmgmNsWt.UQO55IAjrdtqagQkBaNSvlrk34FbA7O',
+    createdAt: new Date().toISOString(),
+  },
+]
+
+export const userRepository = {
+  async findByEmail(email: string): Promise<User | null> {
+    if (!isFirebaseConfigured) return memoryUsers.find(u => u.email === email) ?? null
+    try {
+      const snapshot = await collection.where('email', '==', email).limit(1).get()
+      const doc = snapshot.docs[0]
+      if (!doc) return null
+      return { id: doc.id, ...(doc.data() as Omit<User, 'id'>) }
+    } catch {
+      return memoryUsers.find(u => u.email === email) ?? null
+    }
+  },
+
+  async findById(id: string): Promise<User | null> {
+    if (!isFirebaseConfigured) return memoryUsers.find(u => u.id === id) ?? null
+    try {
+      const doc = await collection.doc(id).get()
+      if (!doc.exists) return memoryUsers.find(u => u.id === id) ?? null
+      return { id: doc.id, ...(doc.data() as Omit<User, 'id'>) }
+    } catch {
+      return memoryUsers.find(u => u.id === id) ?? null
+    }
+  },
+
+  async create(data: Omit<User, 'id'>): Promise<User> {
+    if (!isFirebaseConfigured) {
+      const user = { id: `user-${Date.now()}`, ...data }
+      memoryUsers.push(user)
+      return user
+    }
+    try {
+      const ref = await collection.add(data)
+      return { id: ref.id, ...data }
+    } catch {
+      const user = { id: `user-${Date.now()}`, ...data }
+      memoryUsers.push(user)
+      return user
     }
   },
 }
@@ -134,10 +376,7 @@ export const parkingSessionRepository = {
         .get()
 
       const doc = snapshot.docs[0]
-      if (!doc) {
-        return memorySessions.find(s => s.vehicleId === vehicleId && s.status === 'ACTIVE') ?? null
-      }
-
+      if (!doc) return null
       return { id: doc.id, ...(doc.data() as Omit<ParkingSession, 'id'>) }
     } catch {
       return memorySessions.find(s => s.vehicleId === vehicleId && s.status === 'ACTIVE') ?? null
@@ -384,11 +623,135 @@ export const createApp = () => {
 
 ---
 
+## 📁 `apps/api/src/scripts/seed-spaces.ts`
+
+```typescript
+import { db } from '../config/firebase.js'
+
+const spaces = [
+  { code: 'A01', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { code: 'A02', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { code: 'A03', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { code: 'A04', zone: 'A', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { code: 'B01', zone: 'B', type: 'REGULAR', status: 'AVAILABLE', active: true },
+  { code: 'B02', zone: 'B', type: 'REGULAR', status: 'AVAILABLE', active: true },
+]
+
+const run = async () => {
+  console.log('Seeding parking spaces into Google Cloud Firestore...')
+  for (const space of spaces) {
+    const existing = await db
+      .collection('parkingSpaces')
+      .where('code', '==', space.code)
+      .limit(1)
+      .get()
+
+    if (existing.empty) {
+      const ref = await db.collection('parkingSpaces').add(space)
+      console.log(`Created space ${space.code} with ID ${ref.id}`)
+    } else {
+      console.log(`Space ${space.code} already exists (${existing.docs[0].id})`)
+    }
+  }
+}
+
+run().catch(error => {
+  console.error(error)
+  process.exit(1)
+})
+```
+
+---
+
+## 📁 `apps/api/src/scripts/create-admin.ts`
+
+```typescript
+import { authService } from '../modules/auth/auth.service.js'
+
+const run = async () => {
+  const user = await authService.createUser({
+    name: 'Administrador',
+    email: 'admin@parkingflow.local',
+    password: 'Admin123!',
+    role: 'ADMIN',
+  })
+  console.log('Admin created successfully:', user)
+}
+
+run().catch(error => {
+  console.error(error)
+  process.exit(1)
+})
+```
+
+---
+
+## 📁 `apps/api/src/scripts/test-checkin.ts`
+
+```typescript
+import { parkingSessionService } from '../modules/parking-sessions/parking-session.service.js'
+import { parkingSpaceRepository } from '../modules/parking-spaces/parking-space.repository.js'
+
+async function run() {
+  console.log('--- TEST: REGISTRANDO VEHÍCULO EN GOOGLE CLOUD FIRESTORE ---')
+  const session = await parkingSessionService.checkIn(
+    {
+      plate: 'TEST-100',
+      type: 'CAR',
+      brand: 'NISSAN',
+      model: 'TSURU',
+      color: 'ROJO',
+    },
+    '7Ex89nQqcy8MyVTEKCwJ'
+  )
+  console.log('Check-in Exitoso!')
+  console.log('Sesión Creada:', session)
+
+  console.log('\n--- ESTADO DE CAJONES EN CLOUD FIRESTORE TRAS CHECK-IN ---')
+  const spaces = await parkingSpaceRepository.list()
+  spaces.forEach(s => console.log(`  * Cajón ${s.code}: ${s.status} (ID: ${s.id})`))
+}
+
+run().catch(err => {
+  console.error('Error durante test-checkin:', err)
+  process.exit(1)
+})
+```
+
+---
+
+## 📁 `apps/api/src/scripts/inspect-db.ts`
+
+```typescript
+import { db } from '../config/firebase.js'
+
+const run = async () => {
+  console.log('--- INSPECCIONANDO GOOGLE CLOUD FIRESTORE (parkingflow-ferch) ---')
+  const collections = await db.listCollections()
+  console.log('Colecciones disponibles:', collections.map(c => c.id))
+
+  for (const col of collections) {
+    const snap = await col.get()
+    console.log(`\nColección '${col.id}' (${snap.size} documentos en total):`)
+    snap.forEach(doc => {
+      console.log(`  - [${doc.id}]:`, JSON.stringify(doc.data()))
+    })
+  }
+}
+
+run().catch(err => {
+  console.error('Error:', err)
+  process.exit(1)
+})
+```
+
+---
+
 ## 📁 `apps/web/app/components/vehicle/VehicleEntryForm.vue`
 
 ```vue
 <script setup lang="ts">
-interface Payload {
+interface CheckInPayload {
   plate: string
   brand?: string
   model?: string
@@ -397,32 +760,49 @@ interface Payload {
 }
 
 const emit = defineEmits<{
-  submit: [payload: Payload]
->()
+  (event: 'submit', payload: CheckInPayload): void
+}>()
 
 const plate = ref('')
+const type = ref<'CAR' | 'MOTORCYCLE'>('CAR')
 const brand = ref('')
 const model = ref('')
 const color = ref('')
-const type = ref<'CAR' | 'MOTORCYCLE'>('CAR')
 
-const submit = () => {
+const handleSubmit = () => {
+  if (!plate.value.trim()) return
+
   emit('submit', {
-    plate: plate.value,
-    brand: brand.value || undefined,
-    model: model.value || undefined,
-    color: color.value || undefined,
+    plate: plate.value.trim().toUpperCase(),
     type: type.value,
+    brand: brand.value.trim() || undefined,
+    model: model.value.trim() || undefined,
+    color: color.value.trim() || undefined,
   })
+
+  plate.value = ''
+  brand.value = ''
+  model.value = ''
+  color.value = ''
 }
 </script>
 
 <template>
-  <form @submit.prevent="submit" class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-    <h2 class="text-xl font-black text-slate-900">Registrar Entrada</h2>
-    <div class="mt-5 grid gap-4 md:grid-cols-2">
-      <label>
-        <span class="text-sm font-semibold text-slate-700">Placa *</span>
+  <form
+    @submit.prevent="handleSubmit"
+    class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+  >
+    <div class="mb-6">
+      <p class="text-xs font-black uppercase tracking-widest text-indigo-600">Registro</p>
+      <h2 class="mt-1 text-2xl font-black text-slate-900">Entrada de Vehículo</h2>
+      <p class="mt-1 text-sm text-slate-500">
+        Ingresa los datos del vehículo para asignarle automáticamente un cajón disponible.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <label class="lg:col-span-2">
+        <span class="text-sm font-semibold text-slate-700">Placas *</span>
         <input
           type="text"
           v-model="plate"
