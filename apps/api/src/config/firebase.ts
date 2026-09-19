@@ -2,7 +2,15 @@ import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { env } from './env.js'
 
-if (getApps().length === 0) {
+export const isFirebaseConfigured = Boolean(
+  env.FIREBASE_PROJECT_ID &&
+  env.FIREBASE_CLIENT_EMAIL &&
+  env.FIREBASE_PRIVATE_KEY &&
+  !env.FIREBASE_PRIVATE_KEY.includes('mock') &&
+  env.FIREBASE_PRIVATE_KEY.length > 500
+)
+
+if (isFirebaseConfigured && getApps().length === 0) {
   try {
     initializeApp({
       credential: cert({
@@ -16,6 +24,11 @@ if (getApps().length === 0) {
       projectId: env.FIREBASE_PROJECT_ID,
     })
   }
+} else if (getApps().length === 0) {
+  initializeApp({
+    projectId: env.FIREBASE_PROJECT_ID || 'parking-flow-dev',
+  })
 }
 
 export const db = getFirestore()
+

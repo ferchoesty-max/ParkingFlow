@@ -16,9 +16,13 @@ export const createApp = () => {
   app.use(cookieParser())
 
   app.use('/api/v1/health', healthRouter)
+  app.use('/health', healthRouter)
   app.use('/api/v1/auth', authRouter)
+  app.use('/auth', authRouter)
   app.use('/api/v1/parking-spaces', parkingSpaceRouter)
+  app.use('/parking-spaces', parkingSpaceRouter)
   app.use('/api/v1/parking-sessions', parkingSessionRouter)
+  app.use('/parking-sessions', parkingSessionRouter)
 
   app.use((_request, response) => {
     response.status(404).json({ message: 'Route not found' })

@@ -1,4 +1,4 @@
-import { db } from '../../config/firebase.js'
+import { db, isFirebaseConfigured } from '../../config/firebase.js'
 import type { ParkingSpace } from './parking-space.types.js'
 
 const collection = db.collection('parkingSpaces')
@@ -14,6 +14,7 @@ const memorySpaces: ParkingSpace[] = [
 
 export const parkingSpaceRepository = {
   async list(): Promise<ParkingSpace[]> {
+    if (!isFirebaseConfigured) return memorySpaces
     try {
       const snapshot = await collection.orderBy('code').get()
       if (!snapshot.empty) {
@@ -29,6 +30,7 @@ export const parkingSpaceRepository = {
   },
 
   async findByCode(code: string): Promise<ParkingSpace | null> {
+    if (!isFirebaseConfigured) return memorySpaces.find(s => s.code === code) ?? null
     try {
       const snapshot = await collection.where('code', '==', code).limit(1).get()
       const doc = snapshot.docs[0]
@@ -40,6 +42,11 @@ export const parkingSpaceRepository = {
   },
 
   async create(data: Omit<ParkingSpace, 'id'>): Promise<ParkingSpace> {
+    if (!isFirebaseConfigured) {
+      const space = { id: `space-${Date.now()}`, ...data }
+      memorySpaces.push(space)
+      return space
+    }
     try {
       const ref = await collection.add(data)
       const space = { id: ref.id, ...data }
