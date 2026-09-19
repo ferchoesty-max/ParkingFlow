@@ -33,3 +33,8 @@ SINCRONIZACION_LINUX.md
 *prompt*.md
 _agents/
 
+# Firebase Service Account Secrets
+*firebase-adminsdk*.json
+*adminsdk*.json
+
+
