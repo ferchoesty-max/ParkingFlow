@@ -8,12 +8,22 @@ const {
   occupied,
   outOfService,
   occupancyPercentage,
-} = useParkingMock()
+  error,
+  status,
+  refresh,
+} = useParkingSpaces()
+
+const { checkIn } = useParkingSessions()
 
 const selectedSpace = ref<ParkingSpace | null>(null)
 
 const handleSelect = (space: ParkingSpace) => {
   selectedSpace.value = space
+}
+
+const handleCheckIn = async (payload: Parameters<typeof checkIn>[0]) => {
+  await checkIn(payload)
+  await refresh()
 }
 </script>
 
@@ -48,7 +58,20 @@ const handleSelect = (space: ParkingSpace) => {
         </p>
       </div>
 
-      <ParkingGrid :spaces="spaces" @select="handleSelect" />
+      <div v-if="status === 'pending'" class="rounded-2xl bg-white p-6 text-slate-500">
+        Cargando cajones...
+      </div>
+
+      <div v-else-if="error" class="rounded-2xl border border-red-200 bg-red-50 p-6">
+        <p class="font-bold text-red-700">No fue posible cargar los cajones.</p>
+        <button class="mt-3 rounded-lg bg-red-600 px-4 py-2 text-white" @click="refresh()">
+          Reintentar
+        </button>
+      </div>
+
+      <ParkingGrid v-else :spaces="spaces" @select="handleSelect" />
+
+      <VehicleEntryForm @submit="handleCheckIn" />
     </div>
   </main>
 </template>
