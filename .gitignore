@@ -27,3 +27,9 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local synchronization & agent prompts
+SINCRONIZACION_LINUX.md
+*prompt*.md
+_agents/
+
