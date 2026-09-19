@@ -17,13 +17,10 @@ export const parkingSpaceRepository = {
     if (!isFirebaseConfigured) return memorySpaces
     try {
       const snapshot = await collection.orderBy('code').get()
-      if (!snapshot.empty) {
-        return snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...(doc.data() as Omit<ParkingSpace, 'id'>),
-        }))
-      }
-      return memorySpaces
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...(doc.data() as Omit<ParkingSpace, 'id'>),
+      }))
     } catch {
       return memorySpaces
     }
@@ -34,7 +31,7 @@ export const parkingSpaceRepository = {
     try {
       const snapshot = await collection.where('code', '==', code).limit(1).get()
       const doc = snapshot.docs[0]
-      if (!doc) return memorySpaces.find(s => s.code === code) ?? null
+      if (!doc) return null
       return { id: doc.id, ...(doc.data() as Omit<ParkingSpace, 'id'>) }
     } catch {
       return memorySpaces.find(s => s.code === code) ?? null

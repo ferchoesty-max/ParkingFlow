@@ -23,7 +23,7 @@ export const userRepository = {
     try {
       const snapshot = await collection.where('email', '==', email).limit(1).get()
       const doc = snapshot.docs[0]
-      if (!doc) return memoryUsers.find(u => u.email === email) ?? null
+      if (!doc) return null
       return { id: doc.id, ...(doc.data() as Omit<User, 'id'>) }
     } catch {
       return memoryUsers.find(u => u.email === email) ?? null

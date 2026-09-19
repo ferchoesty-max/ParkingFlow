@@ -20,10 +20,7 @@ export const parkingSessionRepository = {
         .get()
 
       const doc = snapshot.docs[0]
-      if (!doc) {
-        return memorySessions.find(s => s.vehicleId === vehicleId && s.status === 'ACTIVE') ?? null
-      }
-
+      if (!doc) return null
       return { id: doc.id, ...(doc.data() as Omit<ParkingSession, 'id'>) }
     } catch {
       return memorySessions.find(s => s.vehicleId === vehicleId && s.status === 'ACTIVE') ?? null

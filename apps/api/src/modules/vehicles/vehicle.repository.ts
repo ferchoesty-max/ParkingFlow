@@ -10,7 +10,7 @@ export const vehicleRepository = {
     try {
       const snapshot = await collection.where('plate', '==', plate).limit(1).get()
       const doc = snapshot.docs[0]
-      if (!doc) return memoryVehicles.find(v => v.plate === plate) ?? null
+      if (!doc) return null
       return { id: doc.id, ...(doc.data() as Omit<Vehicle, 'id'>) }
     } catch {
       return memoryVehicles.find(v => v.plate === plate) ?? null
